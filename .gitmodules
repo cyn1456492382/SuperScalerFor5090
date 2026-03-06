@@ -4,3 +4,7 @@
 [submodule "external/apex"]
 	path = external/apex
 	url = https://github.com/NVIDIA/apex.git
+[submodule "external/apex-enhanced"]
+	path = external/apex-enhanced
+	url = git@github.com:miceforrat/apex.git
+	branch = fix_for_aceso
