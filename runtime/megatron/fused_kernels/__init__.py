@@ -50,7 +50,7 @@ def load(args):
             build_directory=buildpath,
             extra_cflags=['-O3',],
             extra_cuda_cflags=['-O3',
-                               '-gencode', 'arch=compute_70,code=sm_70',
+                            #    '-gencode', 'arch=compute_70,code=sm_70',
                                '--use_fast_math'] + extra_cuda_flags + cc_flag,
             verbose=(args.rank == 0)
         )

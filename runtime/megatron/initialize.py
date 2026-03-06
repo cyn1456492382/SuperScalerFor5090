@@ -97,6 +97,22 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         # No continuation function
         return None
 
+# def _compile_dependencies():
+#     args = get_args()
+
+#     if torch.distributed.get_rank() == 0:
+#         start_time = time.time()
+#         print('> compiling dataset index builder ...')
+#         from megatron.data.dataset_utils import compile_helper
+#         compile_helper()
+#         print('>>> done with dataset index builder. Compilation time: {:.3f} '
+#               'seconds'.format(time.time() - start_time), flush=True)
+
+#     if torch.distributed.is_initialized():
+#         torch.distributed.barrier(device_ids=[torch.cuda.current_device()])
+
+#     if torch.distributed.get_rank() == 0:
+#         print('>>> skipping fused_kernels.load(args) for debugging', flush=True)
 
 def _compile_dependencies():
 
@@ -188,6 +204,24 @@ def _initialize_distributed():
             else:
                 args.local_rank = device
             torch.cuda.set_device(device)
+        # if device_count > 0:
+        #     import os
+
+        #     if args.local_rank is None:
+        #         env_local_rank = os.getenv("LOCAL_RANK")
+        #         if env_local_rank is not None:
+        #             args.local_rank = int(env_local_rank)
+        #         else:
+        #             args.local_rank = args.rank % device_count
+
+        #     device = args.local_rank
+        #     assert 0 <= device < device_count, \
+        #         f"local_rank {device} is out of range for {device_count} visible CUDA devices"
+
+        #     torch.cuda.set_device(device)
+
+        #     if args.rank == 0:
+        #         print(f"> using CUDA device {device} / {device_count}", flush=True)
         # Call the init process
         init_method = 'tcp://'
         master_ip = os.getenv('MASTER_ADDR', 'localhost')
