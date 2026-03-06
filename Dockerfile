@@ -1,24 +1,28 @@
-FROM nvcr.io/nvidia/tensorflow:22.02-tf2-py3
+FROM nvcr.io/nvidia/pytorch:25.02-py3
 
-RUN pip install -U pip setuptools 
-RUN pip install torch==1.12.0+cu116 -f https://download.pytorch.org/whl/torch/
+RUN pip install -U pip setuptools
+
+# 先装 aceso 依赖（确保这里的 requirements.txt 不再 pin numpy==1.20.0）
 COPY requirements.txt /workspace/requirements.txt
 WORKDIR /workspace
 RUN pip install -r requirements.txt
 
+# 编译 apex（sm_120）
+ENV TORCH_CUDA_ARCH_LIST="12.0"
+ENV CUDA_HOME=/usr/local/cuda
+
+
 COPY external/apex /workspace/apex
 WORKDIR /workspace/apex
-RUN pip install -r requirements.txt
-RUN pip install -v --disable-pip-version-check --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext"  ./
 
-COPY external/alpa /workspace/alpa
-WORKDIR /workspace/alpa
-RUN pip uninstall -y cupy-cuda115
+# apex requirements 这句可留可不留（留着也安全，因为都是 >=）
 RUN pip install -r requirements.txt
 
-RUN pip install jaxlib==0.3.5+cuda113.cudnn820 -f https://github.com/alpa-projects/alpa/releases/download/v0.1.5/jaxlib-0.3.5%2Bcuda113.cudnn820-cp38-none-manylinux2010_x86_64.whl
+ENV APEX_CPP_EXT=1
+ENV APEX_CUDA_EXT=1
+RUN pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation ./
 
-RUN apt-get update && apt-get -y install pssh
-RUN apt-get -y install coinor-cbc
+# 工具（如果 aceso 需要）
+RUN apt-get update && apt-get -y install pssh coinor-cbc && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
