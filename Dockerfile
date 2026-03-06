@@ -10,6 +10,7 @@ RUN pip install -r requirements.txt
 # 编译 apex（sm_120）
 ENV TORCH_CUDA_ARCH_LIST="12.0"
 ENV CUDA_HOME=/usr/local/cuda
+<<<<<<< HEAD
 
 
 # COPY external/apex /workspace/apex
@@ -22,6 +23,20 @@ ENV CUDA_HOME=/usr/local/cuda
 # ENV APEX_CUDA_EXT=1
 # RUN pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation ./
 
+=======
+
+
+COPY external/apex /workspace/apex
+WORKDIR /workspace/apex
+
+# apex requirements 这句可留可不留（留着也安全，因为都是 >=）
+RUN pip install -r requirements.txt
+
+ENV APEX_CPP_EXT=1
+ENV APEX_CUDA_EXT=1
+RUN pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation ./
+
+>>>>>>> 6e8444d (partly modified for commit)
 # 工具（如果 aceso 需要）
 RUN apt-get update && apt-get -y install pssh coinor-cbc && rm -rf /var/lib/apt/lists/*
 

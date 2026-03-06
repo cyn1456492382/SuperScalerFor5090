@@ -1,0 +1,13 @@
+enc-2nd-layernorm
+enc-MLP-GEMM-1
+enc-MLP-GEMM-2
+enc-MLP-gelu
+enc-attention-context
+enc-attention-dense
+enc-attention-dropout
+enc-attention-score
+enc-attention-softmax
+enc-post-MLP-dropout
+enc-post-attention-dropout
+final-layernorm
+gpt-post-process
