@@ -59,7 +59,8 @@ def run(rank, world_size, data_size_list, model, size, torch_data_type):
     else:
         raise RuntimeError(f"type {torch_data_type} not support.")
 
-    if model == "gpt":
+    # treat Qwen as GPT-like for communication profiling (same collective patterns)
+    if model in ("gpt", "qwen"):
         collectives = ["all_gather", "all_reduce", "reduce_scatter", "all_to_all"]
     elif model == "resnet":
         collectives = ["all_gather", "all_to_all"]

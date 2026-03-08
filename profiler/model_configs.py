@@ -15,12 +15,27 @@ model_prof_configs = {
         "mbs": [1, 2, 4, 8],
         "algo": [0, 1]
     },
+    "qwen": {
+        "dtype": "fp16",
+        "model_size": ["0_6B"],
+        "mbs": [1,2,4,8],
+        "algo": [0,1]
+    },
     "t5": {
         "dtype": "fp16",
         "model_size": ["770M", "3B", "6B", "11B"],
         "mbs": [1, 2, 4, 8],
         "algo": [0]
     }
+}
+
+# Add qwen model family for profiling (placeholder/approximate entries).
+# Please verify parameters (num_layers, hidden_size, etc.) for accuracy.
+model_prof_configs["qwen"] = {
+    "dtype": "fp16",
+    "model_size": ["0_6B"],
+    "mbs": [1, 2, 4, 8],
+    "algo": [0, 1]
 }
 
 # model_size: (num_layers, in_channels, width_factor, params_dtype)
@@ -42,6 +57,37 @@ gpt_configs = {
     "13B": (1, 2048, 5120, 5120*4, 40, 5120//40, 51200, "fp16"),
     "scale-layer": (1, 2048, 512, 512*4, 8, 512//8, 51200, "fp16")
 }
+
+# Qwen-3-0.6B approximate configuration for op-level profiling.
+# Replace these values with exact model spec if available.
+qwen_configs = {
+    # model_size: (num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)
+    "0_6B": (1, 8192, 2048, 2048*4, 32, 2048//32, 51200, "fp16")
+}
+
+# Allow overriding qwen config from profiler/qwen_config.json when available.
+try:
+    import json
+    from pathlib import Path
+    _qwen_json = Path(__file__).parent / "qwen3_0.6B_config.json"
+    if _qwen_json.exists():
+        data = json.loads(_qwen_json.read_text())
+        # fill tuple ordering used above
+        qwen_configs = {
+            "0_6B": (
+                data.get("num_layers", 1),
+                data.get("seq_len", 8192),
+                data.get("hidden_size", 2048),
+                data.get("ffn_hidden_size", data.get("hidden_size", 2048) * 4),
+                data.get("num_attention_heads", 32),
+                data.get("kv_channels", data.get("hidden_size", 2048)//data.get("num_attention_heads", 32)),
+                data.get("vocab_size", 51200),
+                data.get("params_dtype", "fp16")
+            )
+        }
+        print("Loaded Qwen config from profiler/qwen_config.json")
+except Exception:
+    pass
 
 # model_size: (num_layers, encoder_seq_length, decoder_seq_length, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)
 ## T5-22B is obtained by doubling the layer number in T5-11B, thus share the same op-level profiling results

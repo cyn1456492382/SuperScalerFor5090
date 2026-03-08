@@ -1,11 +1,11 @@
-FROM nvcr.io/nvidia/pytorch:25.02-py3
+FROM nvcr.io/nvidia/pytorch:25.08-py3
 
 RUN pip install -U pip setuptools
 
 # 先装 aceso 依赖（确保这里的 requirements.txt 不再 pin numpy==1.20.0）
 COPY requirements.txt /workspace/requirements.txt
 WORKDIR /workspace
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
 
 # 编译 apex（sm_120）
 ENV TORCH_CUDA_ARCH_LIST="12.0"
