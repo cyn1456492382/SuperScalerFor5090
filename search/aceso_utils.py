@@ -476,7 +476,7 @@ def parse_args():
             args.model_name = config_dict["model_name"]
             args.model_size = config_dict["model_size"]
 
-    if args.model_name not in ["resnet", "gpt", "t5", "scale-layer"]:
+    if args.model_name not in ["resnet", "gpt", "t5", "scale-layer", "qwen"]:
         raise RuntimeError(f"model {args.model_name} is not supported yet.")
 
     if args.num_layers is None:
@@ -484,6 +484,9 @@ def parse_args():
             args.num_layers = sum(resnet_configs[args.model_size][0])
         elif args.model_name == "gpt":
             args.num_layers = gpt_configs[args.model_size][0]
+        elif args.model_name == "qwen":
+            from profiler import model_configs as _mc
+            args.num_layers = _mc.qwen_configs[args.model_size][0]
         elif args.model_name == "t5":
             args.num_layers = t5_configs[args.model_size][0]
         elif args.model_name == "scale-layer":
@@ -508,7 +511,7 @@ def parse_args():
         args.time_budget_per_trial = args.time_budget_total
 
     args.min_mbs = min(args.micro_batch_size)
-    if args.model_name in ["gpt", "scale-layer", "resnet"]:
+    if args.model_name in ["gpt", "scale-layer", "resnet", "qwen"]:
         args.num_algos = 2
     elif args.model_name == "t5":
         args.num_algos = 1

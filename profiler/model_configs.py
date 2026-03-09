@@ -15,6 +15,12 @@ model_prof_configs = {
         "mbs": [1, 2, 4, 8],
         "algo": [0, 1]
     },
+    "qwen": {
+        "dtype": "fp16",
+        "model_size": ["0_6B"],
+        "mbs": [1,2,4,8],
+        "algo": [0,1]
+    },
     "t5": {
         "dtype": "fp16",
         "model_size": ["770M", "3B", "6B", "11B"],
@@ -41,6 +47,13 @@ gpt_configs = {
     "6_7B": (1, 2048, 4096, 4096*4, 32, 4096//32, 51200, "fp16"),
     "13B": (1, 2048, 5120, 5120*4, 40, 5120//40, 51200, "fp16"),
     "scale-layer": (1, 2048, 512, 512*4, 8, 512//8, 51200, "fp16")
+}
+
+# Qwen-3-0.6B approximate configuration for op-level profiling.
+# Replace these values with exact model spec if available.
+qwen_configs = {
+    # model_size: (num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)
+    "0_6B": (1, 8192, 2048, 2048*4, 32, 2048//32, 51200, "fp16")
 }
 
 # model_size: (num_layers, encoder_seq_length, decoder_seq_length, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)

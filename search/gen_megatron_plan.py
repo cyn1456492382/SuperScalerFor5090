@@ -29,13 +29,13 @@ def get_balance_config(pp, tp, dp, base_mbs, recomp):
         recompute_ops = [1 for _ in range(NUM_OPS)]
     else:
         recompute_ops = [0 for _ in range(NUM_OPS)]
-    if args.model_name in ["gpt", "t5", "scale-layer"]:
+    if args.model_name in ["gpt", "t5", "scale-layer", "qwen"]:
         recompute_ops[0] = 0
         recompute_ops[-1] = 0
     algo_list = [0 for _ in range(NUM_OPS)]
     base_batch_size = base_mbs
 
-    if args.model_name in ["gpt", "scale-layer"]:
+    if args.model_name in ["gpt", "scale-layer", "qwen"]:
         config_list = []
         if args.num_layers % pp == 0:
             num_ops_list = [(args.num_layers//pp) * 13 for _ in range(pp)]

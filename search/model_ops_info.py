@@ -32,7 +32,7 @@ def get_full_op_list(args):
     if op_list is None:
         op_list = get_op_list(args)
     if full_op_list is None:
-        if args.model_name in ["gpt", "scale-layer"]:
+        if args.model_name in ["gpt", "scale-layer", "qwen"]:
             head_ops = [op_list[0]]
             decoder_layer = op_list[1:14]
             tail_ops = op_list[14:]
@@ -58,7 +58,7 @@ def get_tunable_op_list(args):
     """
     global tunable_op_list, op_list
     if tunable_op_list is None:
-        if args.model_name in ["gpt", "scale-layer"]:
+        if args.model_name in ["gpt", "scale-layer", "qwen"]:
             tunable_op_list = ["encoder-embedding", "enc-attention-qkv", "enc-attention-dense", "enc-MLP-GEMM-1", "enc-MLP-GEMM-2"]
         elif args.model_name in ["t5"]:
             tunable_op_list = ["encoder-embedding", "enc-attention-qkv", "enc-attention-dense", "enc-MLP-GEMM-1", "enc-MLP-GEMM-2", "dec-attention-qkv-1", "dec-attention-dense-1", "dec-attention-qkv-2","dec-attention-dense-2", "dec-MLP-GEMM-1", "dec-MLP-GEMM-2"]
@@ -79,7 +79,7 @@ def get_no_recompute_op_list(args):
     """
     global no_recompute_op_list
     if no_recompute_op_list is None:
-        if args.model_name in ["gpt", "scale-layer"]:
+        if args.model_name in ["gpt", "scale-layer", "qwen"]:
             no_recompute_op_list = ["encoder-embedding", "gpt-post-process"]
         elif args.model_name in ["t5"]:
             no_recompute_op_list = ["encoder-embedding", "decoder-embedding", "t5-post-process"]

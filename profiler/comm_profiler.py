@@ -9,7 +9,7 @@ import time
 import csv 
 import pickle
 import argparse
-from model_configs import model_prof_configs, resnet_configs, gpt_configs, t5_configs
+from model_configs import model_prof_configs, resnet_configs, gpt_configs, t5_configs, qwen_configs
 
 def parse_args():
     parser = argparse.ArgumentParser(description='communication-profiler arguments', allow_abbrev=False)
@@ -59,7 +59,7 @@ def run(rank, world_size, data_size_list, model, size, torch_data_type):
     else:
         raise RuntimeError(f"type {torch_data_type} not support.")
 
-    if model == "gpt":
+    if model in ("gpt","qwen"):
         collectives = ["all_gather", "all_reduce", "reduce_scatter", "all_to_all"]
     elif model == "resnet":
         collectives = ["all_gather", "all_to_all"]
