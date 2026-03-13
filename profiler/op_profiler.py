@@ -57,7 +57,9 @@ def wrap_op(op):
         mpu.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
 
     op.cuda(torch.cuda.current_device())
-    if args.fp16:
+    # Add bf16 support
+    # Float16Module already supports bf16, so no additional modifications are needed.
+    if args.fp16 or args.bf16:
         op = Float16Module(op, args) 
 
     if args.DDP_impl == 'local':
@@ -82,6 +84,13 @@ def get_params_dtype(params_dtype):
         DATA_BASE = 2 / (1024*1024)
         params_dtype = torch.half
         args.fp16 = True
+        args.params_dtype = params_dtype
+    # Add bf16 support
+    elif params_dtype == "bf16":
+        DATA_BASE = 2 / (1024*1024)
+        params_dtype = torch.bfloat16
+        args.fp16 = False
+        args.bf16 = True
         args.params_dtype = params_dtype
     else:
         raise RuntimeError(f"data type {params_dtype} not supported.")

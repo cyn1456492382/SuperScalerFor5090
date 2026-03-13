@@ -56,6 +56,8 @@ def run(rank, world_size, data_size_list, model, size, torch_data_type):
         mb_per_item = 4 / (1024*1024)
     elif torch_data_type == torch.half:
         mb_per_item = 2 / (1024*1024)
+    elif torch_data_type == torch.bfloat16:
+        mb_per_item = 2 / (1024*1024)
     else:
         raise RuntimeError(f"type {torch_data_type} not support.")
 
@@ -191,6 +193,10 @@ def run_profile(task):
     elif data_type == "fp32":
         torch_data_type = torch.float
         num_item_per_mb = 1024 * 1024 / 4
+    
+    elif data_type == "bf16":
+        torch_data_type = torch.bfloat16
+        num_item_per_mb = 1024 * 1024 / 2
     else:
         raise RuntimeError(f"data type {data_type} not support.")
 

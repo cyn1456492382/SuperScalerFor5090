@@ -485,7 +485,7 @@ def parse_args():
         elif args.model_name == "gpt":
             args.num_layers = gpt_configs[args.model_size][0]
         elif args.model_name == "qwen":
-            from profiler import model_configs as _mc
+            from ..profiler import model_configs as _mc
             args.num_layers = _mc.qwen_configs[args.model_size][0]
         elif args.model_name == "t5":
             args.num_layers = t5_configs[args.model_size][0]
