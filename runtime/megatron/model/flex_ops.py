@@ -217,6 +217,25 @@ def gen_op(op_info, algo):
                                  parallel_output = op_info["parallel_output"],
                                  init_method = op_info["init_method"],
                                  prev_name=op_info["prev_name"])
+    elif "attention-gqa-qkv" in op_info["name"]:
+        op = ParallelGQAQKVOp(
+            name=op_info["name"],
+            op_index=op_info["op_index"],
+            init_method=op_info["init_method"],
+            attention_type=op_info["attention_type"],
+            algo=algo,
+            prev_name=op_info["prev_name"])
+    elif "attention-gqa-score" in op_info["name"]:
+        op = ParallelGQAAttentionScoreOp(
+            name=op_info["name"],
+            op_index=op_info["op_index"],
+            layer_number=op_info["layer_number"],
+            prev_name=op_info["prev_name"])
+    elif "attention-gqa-context" in op_info["name"]:
+        op = ParallelGQAContextOp(
+            name=op_info["name"],
+            op_index=op_info["op_index"],
+            prev_name=op_info["prev_name"])
     else:
         raise RuntimeError(f"operator {op_info['name']} is not supported.")
     return op
@@ -1717,3 +1736,387 @@ class ParallelFCOp(RopalaModule):
         if DEBUG_OUTPUT:
             print(f"[DEBUG] rank = {torch.distributed.get_rank()} op = {self.name} output size = {list(output_tensor.size())}")
         return output_tensors   
+
+class ParallelGQAQKVOp(RopalaModule):
+    def __init__(self, init_method,
+                 attention_type, op_index, algo=0, name=None, prev_name=None):
+        super(ParallelGQAQKVOp, self).__init__(op_index, name, prev_name)
+        args = get_args()
+
+        num_key_value_heads = args.num_query_groups
+        self.num_key_value_heads = num_key_value_heads
+
+        projection_size = args.kv_channels * args.num_attention_heads
+        kv_projection_size = args.kv_channels * num_key_value_heads
+        self.attention_type = attention_type
+        if algo == 0:
+            self.algo = "column"
+        elif algo == 1:
+            self.algo = "row"
+        else:
+            raise RuntimeError("algo not implemented.")
+
+        rank_in_pipeline = mpu.get_pipeline_model_parallel_rank()
+        if args.resharding_stages[rank_in_pipeline]:
+            self.resharding = True
+            if self.algo == "column":
+                self.query = mpu.NewColumnParallelLinear(
+                    args.hidden_size,
+                    projection_size,
+                    self.tp_size,
+                    gather_output=False,
+                    init_method=init_method)
+                self.key_value = mpu.NewColumnParallelLinear(
+                    args.hidden_size,
+                    2 * kv_projection_size,
+                    self.tp_size,
+                    gather_output=False,
+                    init_method=init_method)
+            elif self.algo == "row":
+                self.query = mpu.NewRowParallelLinear(
+                    args.hidden_size,
+                    projection_size,
+                    self.tp_size,
+                    init_method=init_method)
+                self.key_value = mpu.NewRowParallelLinear(
+                    args.hidden_size,
+                    2 * kv_projection_size,
+                    self.tp_size,
+                    init_method=init_method)
+            world_size = self.tp_size
+        else:
+            self.resharding = False
+            self.query = mpu.ColumnParallelLinear(
+                args.hidden_size,
+                projection_size,
+                gather_output=False,
+                init_method=init_method)
+            self.key_value = mpu.ColumnParallelLinear(
+                args.hidden_size,
+                2 * kv_projection_size,
+                gather_output=False,
+                init_method=init_method)
+            world_size = mpu.get_tensor_model_parallel_world_size()
+
+        self.num_attention_heads_per_partition = mpu.divide(
+            args.num_attention_heads, world_size)
+        self.num_kv_heads_per_partition = mpu.divide(
+            num_key_value_heads, world_size)
+        self.hidden_size_per_partition = mpu.divide(projection_size, world_size)
+        self.kv_hidden_size_per_partition = mpu.divide(kv_projection_size, world_size)
+        self.hidden_size_per_attention_head = mpu.divide(
+            projection_size, args.num_attention_heads)
+
+        if self.algo == "row":
+            assert self.resharding is True
+
+        if self.name == "enc-attention-gqa-qkv":
+            extra_tensor_name = "value_layer"
+            self.input_tensors_info = {"hidden_states": {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}}
+            self.output_tensors_info = {
+                "query_layer": {"shape": [args.seq_length, args.micro_batch_size, args.num_attention_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "key_layer": {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1}
+            }
+            self.output_extra_tensors_info = {
+                extra_tensor_name: {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1, "send_to": 4}
+            }
+        elif self.name == "dec-attention-gqa-qkv-1":
+            extra_tensor_name = "value_layer_1"
+            self.input_tensors_info = {
+                "hidden_states": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1},
+                "encoder_output": {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            }
+            self.output_tensors_info = {
+                "query_layer": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.num_attention_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "key_layer": {"shape": [args.decoder_seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "encoder_output": {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            }
+            self.output_extra_tensors_info = {
+                extra_tensor_name: {"shape": [args.decoder_seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1, "send_to": 4}
+            }
+        elif self.name == "dec-attention-gqa-qkv-2":
+            extra_tensor_name = "value_layer_2"
+            self.input_tensors_info = {
+                "hidden_states": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1},
+                "encoder_output": {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            }
+            self.output_tensors_info = {
+                "query_layer": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.num_attention_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "key_layer": {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "encoder_output": {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            }
+            self.output_extra_tensors_info = {
+                extra_tensor_name: {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1, "send_to": 4}
+            }
+
+        if self.algo == "column":
+            self.required_input_specs = {"hidden_states": {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]}}
+            self.output_specs = {
+                "query_layer": {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]},
+                "key_layer": {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}
+            }
+            self.output_mats_info = {
+                "query_layer": {"from": "hidden_states", "trans": [4, 1, 2, 3, 0]},
+                "key_layer": {"from": "hidden_states", "trans": [4, 1, 2, 3, 0]}
+            }
+            self.output_extra_specs = {extra_tensor_name: {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}}
+            self.output_extra_mats_info = {extra_tensor_name: {"from": "hidden_states", "trans": [4, 1, 2, 3, 0]}}
+        elif self.algo == "row":
+            self.required_input_specs = {"hidden_states": {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}}
+            self.output_specs = {
+                "query_layer": {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]},
+                "key_layer": {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]}
+            }
+            self.output_mats_info = {
+                "query_layer": {"from": "hidden_states", "trans": [4, 1, 2, 3, 0]},
+                "key_layer": {"from": "hidden_states", "trans": [4, 1, 2, 3, 0]}
+            }
+            self.output_extra_specs = {extra_tensor_name: {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]}}
+            self.output_extra_mats_info = {extra_tensor_name: {"from": "hidden_states", "trans": [4, 1, 2, 3, 0]}}
+
+        if self.name == "dec-attention-gqa-qkv-1":
+            self.required_input_specs["encoder_output"] = {}
+            self.output_specs["encoder_output"] = {}
+            self.output_mats_info["encoder_output"] = {}
+        elif self.name == "dec-attention-qkv-2":
+            if self.algo == "column":
+                self.required_input_specs["encoder_output"] = {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]}
+                self.output_specs["encoder_output"] = {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]}
+                self.output_mats_info["encoder_output"] = {"from": "encoder_output", "trans": [0, 1, 2, 3, 4]}
+            elif self.algo == "row":
+                self.required_input_specs["encoder_output"] = {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}
+                self.output_specs["encoder_output"] = {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}
+                self.output_mats_info["encoder_output"] = {"from": "encoder_output", "trans": [0, 1, 2, 3, 4]}
+
+        self.weight_size = (args.hidden_size * projection_size / self.tp_size) + \
+                           (args.hidden_size * 2 * kv_projection_size / self.tp_size)
+
+    def forward(self, input_tensors, input_extra_tensors, output_extra_tensors, profiling=False):
+        output_tensors = {}
+        hidden_states = input_tensors["hidden_states"]
+
+        if self.resharding and self.algo == "column":
+            hidden_states = new_copy_to_tensor_model_parallel_region(
+                self.op_index, hidden_states, self.required_input_specs["hidden_states"], self.input_mats["hidden_states"]
+            )
+        query_layer, _ = self.query(hidden_states)          # [seq_len, batch, num_heads * head_dim]
+        mixed_kv_layer, _ = self.key_value(hidden_states)   # [seq_len, batch, 2 * num_kv_heads * head_dim]
+
+        if self.resharding and self.algo == "row":
+            output_mats = self.input_mats["hidden_states"].transpose([4, 1, 2, 3, 0])
+            query_layer = new_reduce_from_tensor_model_parallel_region(
+                self.op_index, query_layer, self.output_specs["query_layer"], output_mats
+            )
+            mixed_kv_layer = new_reduce_from_tensor_model_parallel_region(
+                self.op_index, mixed_kv_layer, self.output_specs["key_layer"], output_mats
+            )
+
+        new_tensor_shape = query_layer.size()[:-1] + \
+            (self.num_attention_heads_per_partition, self.hidden_size_per_attention_head)
+        query_layer = query_layer.view(*new_tensor_shape)
+
+        new_tensor_shape = mixed_kv_layer.size()[:-1] + \
+            (self.num_kv_heads_per_partition, 2 * self.hidden_size_per_attention_head)
+        mixed_kv_layer = mixed_kv_layer.view(*new_tensor_shape)
+
+        key_layer, value_layer = mpu.split_tensor_along_last_dim(mixed_kv_layer, 2, contiguous_split_chunks=True)
+
+        if self.attention_type == AttnType.cross_attn:
+            encoder_output = input_tensors["encoder_output"]
+            mixed_kv_layer, _ = self.key_value(encoder_output)   # [sk, b, 2 * num_kv_heads * head_dim]
+            new_tensor_shape = mixed_kv_layer.size()[:-1] + \
+                (self.num_kv_heads_per_partition, 2 * self.hidden_size_per_attention_head)
+            mixed_kv_layer = mixed_kv_layer.view(*new_tensor_shape)
+            key_layer, value_layer = mpu.split_tensor_along_last_dim(mixed_kv_layer, 2, contiguous_split_chunks=True)
+
+            pass
+
+        output_tensors["query_layer"] = query_layer
+        output_tensors["key_layer"] = key_layer
+
+        for key in sorted(self.output_extra_tensors_info):
+            if self.output_extra_tensors_info[key].get("cross_stage", False):
+                output_extra_tensors[key] = value_layer
+                input_extra_tensors[key] = value_layer
+            else:
+                input_extra_tensors[key] = value_layer
+
+        if "dec" in self.name:
+            output_tensors["encoder_output"] = input_tensors["encoder_output"]
+
+        if self.resharding:
+            self.new_input_extra_tensors = {"value_layer"}
+
+        return output_tensors
+    
+class ParallelGQAAttentionScoreOp(RopalaModule):
+    def __init__(self, layer_number, op_index, name=None, prev_name=None):
+        super(ParallelGQAAttentionScoreOp, self).__init__(op_index, name, prev_name)
+        args = get_args()
+
+        num_key_value_heads = args.num_query_groups
+        self.num_key_value_heads = num_key_value_heads
+        self.num_attention_heads = args.num_attention_heads
+        self.group_size = self.num_attention_heads // self.num_key_value_heads
+
+        projection_size = args.kv_channels * args.num_attention_heads
+        self.hidden_size_per_attention_head = mpu.divide(
+            projection_size, args.num_attention_heads)
+
+        self.apply_query_key_layer_scaling = args.apply_query_key_layer_scaling
+        self.attention_softmax_in_fp32 = args.attention_softmax_in_fp32
+        if self.apply_query_key_layer_scaling:
+            self.attention_softmax_in_fp32 = True
+        self.layer_number = max(1, layer_number)
+
+        self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
+        if self.apply_query_key_layer_scaling:
+            coeff = self.layer_number
+            self.norm_factor *= coeff
+
+        if self.name == "enc-attention-gqa-score":
+            self.input_tensors_info = {
+                "query_layer": {"shape": [args.seq_length, args.micro_batch_size, args.num_attention_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "key_layer": {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1}
+            }
+            self.output_tensors_info = {
+                "hidden_states": {"shape": [args.micro_batch_size, args.num_attention_heads, args.seq_length, args.seq_length], "tp_split_dim": 1, "dp_split_dim": 0}
+            }
+        elif self.name == "dec-attention-gqa-score-1":
+            self.input_tensors_info = {
+                "query_layer": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.num_attention_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "key_layer": {"shape": [args.decoder_seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1}
+            }
+            self.output_tensors_info = {
+                "hidden_states": {"shape": [args.micro_batch_size, args.num_attention_heads, args.decoder_seq_length, args.decoder_seq_length], "tp_split_dim": 1, "dp_split_dim": 0}
+            }
+        elif self.name == "dec-attention-gqa-score-2":
+            self.input_tensors_info = {
+                "query_layer": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.num_attention_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1},
+                "key_layer": {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1}
+            }
+            self.output_tensors_info = {
+                "hidden_states": {"shape": [args.micro_batch_size, args.num_attention_heads, args.decoder_seq_length, args.seq_length], "tp_split_dim": 1, "dp_split_dim": 0}
+            }
+        self.required_input_specs = {
+            "query_layer": {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]},
+            "key_layer": {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}
+        }
+        self.output_specs = {
+            "hidden_states": {"R": 1, "V": 1, "dims": [self.dp_size, self.tp_size, 1]}
+        }
+        self.output_mats_info = {
+            "hidden_states": {"from": "query_layer", "trans": [0, 1, 3, 4, 2]}
+        }
+
+        if "dec" in self.name:
+            self.input_tensors_info["encoder_output"] = {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            self.output_tensors_info["encoder_output"] = {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            self.required_input_specs["encoder_output"] = {}
+            self.output_specs["encoder_output"] = {}
+            self.output_mats_info["encoder_output"] = {}
+
+    def forward(self, input_tensors, input_extra_tensors, output_extra_tensors, profiling=False):
+        output_tensors = {}
+        query_layer = input_tensors["query_layer"]  # [sq, b, num_attention_heads, hn]
+        key_layer = input_tensors["key_layer"]      # [sk, b, num_key_value_heads, hn]
+
+        sq, b, num_heads_q, hn = query_layer.shape
+        sk, _, num_heads_k, _ = key_layer.shape
+        group_size = self.group_size
+
+        query_layer = query_layer.view(sq, b, num_heads_k, group_size, hn)
+        key_layer = key_layer.view(sk, b, num_heads_k, 1, hn)
+
+        attention_scores = torch.einsum('sqbgh,skbgh->bgsqsk', query_layer, key_layer)  # [b, num_kv_heads, group_size, sq, sk]
+        attention_scores = attention_scores / self.norm_factor
+
+        attention_scores = attention_scores.view(b, num_heads_k * group_size, sq, sk)
+
+        output_tensors["hidden_states"] = attention_scores
+
+        if "dec" in self.name:
+            output_tensors["encoder_output"] = input_tensors["encoder_output"]
+
+        return output_tensors
+    
+class ParallelGQAContextOp(RopalaModule):
+    def __init__(self, op_index, name=None, prev_name=None):
+        super(ParallelGQAContextOp, self).__init__(op_index, name, prev_name)
+        args = get_args()
+        num_key_value_heads = args.num_query_groups
+        self.num_key_value_heads = num_key_value_heads
+        self.num_attention_heads = args.num_attention_heads
+        self.group_size = self.num_attention_heads // self.num_key_value_heads
+
+        projection_size = args.kv_channels * args.num_attention_heads
+        self.hidden_size_per_partition = mpu.divide(projection_size, self.tp_size)
+
+        if self.name == "enc-attention-gqa-context":
+            extra_tensor_name = "value_layer"
+            self.input_tensors_info = {"hidden_states": {"shape": [args.micro_batch_size, args.num_attention_heads, args.seq_length, args.seq_length], "tp_split_dim": 1, "dp_split_dim": 0}}
+            self.output_tensors_info = {"hidden_states": {"shape": [args.seq_length, args.micro_batch_size, args.kv_channels * args.num_attention_heads], "tp_split_dim": 2, "dp_split_dim": 1}}
+            self.input_extra_tensors_info = {
+                extra_tensor_name: {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1, "recv_from": -4}
+            }
+        elif self.name == "dec-attention-gqa-context-1":
+            extra_tensor_name = "value_layer_1"
+            self.input_tensors_info = {"hidden_states": {"shape": [args.micro_batch_size, args.num_attention_heads, args.decoder_seq_length, args.decoder_seq_length], "tp_split_dim": 1, "dp_split_dim": 0}}
+            self.output_tensors_info = {"hidden_states": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.kv_channels * args.num_attention_heads], "tp_split_dim": 2, "dp_split_dim": 1}}
+            self.input_extra_tensors_info = {
+                extra_tensor_name: {"shape": [args.decoder_seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1, "recv_from": -4}
+            }
+        elif self.name == "dec-attention-gqa-context-2":
+            extra_tensor_name = "value_layer_2"
+            self.input_tensors_info = {"hidden_states": {"shape": [args.micro_batch_size, args.num_attention_heads, args.decoder_seq_length, args.seq_length], "tp_split_dim": 1, "dp_split_dim": 0}}
+            self.output_tensors_info = {"hidden_states": {"shape": [args.decoder_seq_length, args.micro_batch_size, args.kv_channels * args.num_attention_heads], "tp_split_dim": 2, "dp_split_dim": 1}}
+            self.input_extra_tensors_info = {
+                extra_tensor_name: {"shape": [args.seq_length, args.micro_batch_size, num_key_value_heads, args.kv_channels], "tp_split_dim": 2, "dp_split_dim": 1, "recv_from": -4}
+            }
+
+        ## resharding info
+        self.required_input_specs = {"hidden_states": {"R": 1, "V": 1, "dims": [self.dp_size, self.tp_size, 1]}}
+        self.output_specs = {"hidden_states": {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}}
+        self.output_mats_info = {"hidden_states": {"from": "hidden_states", "trans": [0, 1, 4, 2, 3]}}
+        self.required_input_extra_specs = {extra_tensor_name: {"R": 1, "V": 1, "dims": [1, self.dp_size, self.tp_size]}}
+
+        if "dec" in self.name:
+            self.input_tensors_info["encoder_output"] = {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            self.output_tensors_info["encoder_output"] = {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}
+            self.required_input_specs["encoder_output"] = {}
+            self.output_specs["encoder_output"] = {}
+            self.output_mats_info["encoder_output"] = {}
+
+    def forward(self, input_tensors, input_extra_tensors, output_extra_tensors, profiling=False):
+        output_tensors = {}
+
+        if self.name == "enc-attention-gqa-context":
+            value_layer = input_extra_tensors.pop("value_layer") if not profiling else input_extra_tensors["value_layer"]
+        elif self.name == "dec-attention-gqa-context-1":
+            value_layer = input_extra_tensors.pop("value_layer_1") if not profiling else input_extra_tensors["value_layer_1"]
+        elif self.name == "dec-attention-gqa-context-2":
+            value_layer = input_extra_tensors.pop("value_layer_2") if not profiling else input_extra_tensors["value_layer_2"]
+
+        attention_probs = input_tensors["hidden_states"]
+        b, num_heads_q, sq, sk = attention_probs.shape
+        sk_val, b_val, num_heads_kv, hn = value_layer.shape
+        attention_probs = attention_probs.view(b, num_heads_kv, self.group_size, sq, sk)
+
+        value_layer = value_layer.permute(1, 2, 0, 3)
+
+        context_layer = torch.einsum('bkgqs,bk qsh -> bk g q h', attention_probs, value_layer.unsqueeze(2))
+        context_layer = torch.einsum('bkgqs,bk s h -> bkgq h', attention_probs, value_layer)
+
+        context_layer = context_layer.view(b, num_heads_kv * self.group_size, sq, hn)
+
+        context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size_per_partition,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+
+        output_tensors["hidden_states"] = context_layer
+
+        if "dec" in self.name:
+            output_tensors["encoder_output"] = input_tensors["encoder_output"]
+
+        return output_tensors

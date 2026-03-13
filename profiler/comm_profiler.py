@@ -56,11 +56,13 @@ def run(rank, world_size, data_size_list, model, size, torch_data_type):
         mb_per_item = 4 / (1024*1024)
     elif torch_data_type == torch.half:
         mb_per_item = 2 / (1024*1024)
+    # Add bf16 support
     elif torch_data_type == torch.bfloat16:
         mb_per_item = 2 / (1024*1024)
     else:
         raise RuntimeError(f"type {torch_data_type} not support.")
 
+    # Add qwen support
     if model in ("gpt","qwen"):
         collectives = ["all_gather", "all_reduce", "reduce_scatter", "all_to_all"]
     elif model == "resnet":
@@ -193,7 +195,7 @@ def run_profile(task):
     elif data_type == "fp32":
         torch_data_type = torch.float
         num_item_per_mb = 1024 * 1024 / 4
-    
+    # Add bf16 support
     elif data_type == "bf16":
         torch_data_type = torch.bfloat16
         num_item_per_mb = 1024 * 1024 / 2

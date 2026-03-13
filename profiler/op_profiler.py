@@ -136,7 +136,7 @@ def get_model(model_name, model_size):
     elif model_name == "qwen":
         # Use qwen_configs to construct a GPT-like model shape for profiling.
         # NOTE: these are approximate placeholders — verify real model specs.
-        num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype = qwen_configs[model_size]
+        num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype, num_query_groups = qwen_configs[model_size]
         params_dtype = get_params_dtype(params_dtype)
         args.seq_length = seq_len
         args.hidden_size = hidden_size
@@ -147,7 +147,8 @@ def get_model(model_name, model_size):
         args.padded_vocab_size = vocab_size
         args.num_layers = num_layers
         args.seq_length = seq_len
-        model = FlexGPTModel(num_layers=num_layers, hidden_size=hidden_size, ffn_hidden_size=ffn_hidden_size, num_attention_heads=num_attention_heads, kv_channels=kv_channels, profiling=True)
+        args.num_query_groups = num_query_groups
+        model = FlexGPTModel(num_layers=num_layers, hidden_size=hidden_size, ffn_hidden_size=ffn_hidden_size, num_attention_heads=num_attention_heads, kv_channels=kv_channels, profiling=True, num_query_groups = num_query_groups)
 
     args.model_name = model_name
     return model
