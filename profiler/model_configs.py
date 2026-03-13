@@ -53,7 +53,8 @@ gpt_configs = {
 # Replace these values with exact model spec if available.
 qwen_configs = {
     # model_size: (num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)
-    "0_6B":  (1, 2048, 1024, 3072, 16, 128, 151936, "bf16")
+    # "0_6B": (1, 2048, 2048, 2048*4, 32, 2048//32, 51200, "fp16")
+    "0_6B": (1, 2048, 1024, 3072, 16, 64, 151936, "fp16")
 }
 
 # model_size: (num_layers, encoder_seq_length, decoder_seq_length, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)

@@ -99,6 +99,7 @@ def get_params_dtype(params_dtype):
 def get_model(model_name, model_size):
     
     args = get_args()
+    print_rank0(f"===============model_name:{model_name}========================")
     if model_name == "resnet":
         num_layers_list, base_channels, width_factor, params_dtype = resnet_configs[model_size]
         params_dtype = get_params_dtype(params_dtype)
@@ -643,7 +644,7 @@ if __name__ == "__main__":
     ## get profiling tasks
     ## "task"s are defined by unique {model, size, mbs} pairs
     all_prof_tasks = []
-    model_names = ["resnet", "gpt", "t5"] if args.prof_model_name == "all" else [args.prof_model_name]
+    model_names = ["resnet", "gpt", "t5", "qwen"] if args.prof_model_name == "all" else [args.prof_model_name]
     for model in model_names:
         model_sizes = model_prof_configs[model]["model_size"] if args.prof_model_size == "all" else [args.prof_model_size]
         for size in model_sizes:

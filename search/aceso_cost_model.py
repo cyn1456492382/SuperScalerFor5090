@@ -136,7 +136,7 @@ def read_profiled_time(model_name, model_size, time_path):
                     print(f"file ({src_data_file}) not exist, or the file is not formatted as expected.")
     global collective_time
     collective_time = {}
-    if model_name in ["gpt", "scale-layer"]:
+    if model_name in ["gpt", "scale-layer","qwen"]:
         prim_list = ["all_gather", "all_reduce", "reduce_scatter", "all_to_all"]
     elif model_name in ["t5"]:
         prim_list = []

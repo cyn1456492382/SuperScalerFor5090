@@ -44,11 +44,17 @@ t5_configs = {
     "22B": (48, 2048, 512, 1024, 65536, 128, 128, 30592, "fp16"),
 }
 
+qwen_configs = {
+    # model_size: (num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)
+    "0_6B": (28, 2048, 1024, 3072, 16, 64, 151936, "fp16")
+}
+
 ## NOTE: For GPT and T5 models, we use fp16, which will introduce a "main_param" in Megatron
 memory_ratio = {
     "resnet": {"main_params": 0, "optimizer": 2},
     "gpt": {"main_params": 2, "optimizer": 4},
     "t5": {"main_params": 2, "optimizer": 4},
+    "qwen": {"main_params": 2, "optimizer": 4},
 }
 
 MAX_VALUE = 2**30
@@ -167,6 +173,14 @@ def dump_config_to_json(config, file_name, args):
         config_dict["kv_channels"] = kv_channels
         config_dict["hidden_size"] = hidden_size
         config_dict["ffn_hidden_size"] = ffn_hidden_size        
+    elif model_name == "qwen":
+        # future it might be changed
+        _, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, _ = qwen_configs[model_size]
+        config_dict["num_layers"] = num_layers
+        config_dict["seq_length"] = seq_len
+        config_dict["max_position_embeddings"] = seq_len
+        config_dict["num_attention_heads"] = num_attention_heads
+        config_dict["hidden_size"] = hidden_size            
     else:
         raise RuntimeError(f"{model_name} not supportted.")
 
@@ -485,8 +499,7 @@ def parse_args():
         elif args.model_name == "gpt":
             args.num_layers = gpt_configs[args.model_size][0]
         elif args.model_name == "qwen":
-            from ..profiler import model_configs as _mc
-            args.num_layers = _mc.qwen_configs[args.model_size][0]
+            args.num_layers = qwen_configs[args.model_size][0]
         elif args.model_name == "t5":
             args.num_layers = t5_configs[args.model_size][0]
         elif args.model_name == "scale-layer":
