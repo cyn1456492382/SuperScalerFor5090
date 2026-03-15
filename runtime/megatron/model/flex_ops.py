@@ -1931,6 +1931,17 @@ class ParallelGQAQKVOp(RopalaModule):
         if self.attention_type == AttnType.cross_attn:
             encoder_output = input_tensors["encoder_output"]
             mixed_kv_layer, _ = self.key_value(encoder_output)   # [sk, b, 2 * num_kv_heads * head_dim]
+            # 若为行并行，对重新计算的 mixed_kv_layer 执行规约
+            if self.resharding and self.algo == "row":
+                # 获取 encoder_output 对应的矩阵信息（若不存在则回退到 hidden_states 的矩阵）
+                encoder_mats = self.input_mats.get("encoder_output", self.input_mats["hidden_states"])
+                output_mats = encoder_mats.transpose([4, 1, 2, 3, 0])  # 沿用原代码的转置方式
+                mixed_kv_layer = new_reduce_from_tensor_model_parallel_region(
+                    self.op_index,
+                    mixed_kv_layer,
+                    self.output_specs["key_layer"],  # 使用 key_layer 的规格，value_layer 相同
+                    output_mats
+                )
             new_tensor_shape = mixed_kv_layer.size()[:-1] + \
                 (self.num_kv_heads_per_partition, 2 * self.hidden_size_per_attention_head)
             mixed_kv_layer = mixed_kv_layer.view(*new_tensor_shape)
@@ -2035,7 +2046,13 @@ class ParallelGQAAttentionScoreOp(RopalaModule):
         query_layer = query_layer.view(sq, b, num_heads_k, group_size, hn)
         key_layer = key_layer.view(sk, b, num_heads_k, 1, hn)
 
-        attention_scores = torch.einsum('sqbgh,skbgh->bgsqsk', query_layer, key_layer)  # [b, num_kv_heads, group_size, sq, sk]
+        # query: [b, num_heads_k, group_size, sq, hn]
+        query_layer = query_layer.permute(1, 2, 3, 0, 4)
+        # key: [b, num_heads_k, hn, sk]
+        key_layer = key_layer.squeeze(3).permute(1, 2, 3, 0)
+        
+        # 计算注意力分数: [b, num_heads_k, group_size, sq, sk]
+        attention_scores = torch.matmul(query_layer, key_layer)
         attention_scores = attention_scores / self.norm_factor
 
         attention_scores = attention_scores.view(b, num_heads_k * group_size, sq, sk)
@@ -2110,10 +2127,15 @@ class ParallelGQAContextOp(RopalaModule):
         attention_probs = attention_probs.view(b, num_heads_kv, self.group_size, sq, sk)
 
         value_layer = value_layer.permute(1, 2, 0, 3)
+        # [b, num_heads_kv, group_size * sq, sk]
+        attn_merged = attention_probs.view(b, num_heads_kv, self.group_size * sq, sk)
 
-        context_layer = torch.einsum('bkgqs,bk qsh -> bk g q h', attention_probs, value_layer.unsqueeze(2))
-        context_layer = torch.einsum('bkgqs,bk s h -> bkgq h', attention_probs, value_layer)
-
+        attn_3d = attn_merged.view(b * num_heads_kv, self.group_size * sq, sk)   # [b*K, G*sq, sk]
+        value_3d = value_layer.view(b * num_heads_kv, sk, hn)               # [b*K, sk, hn]
+        context_3d = torch.bmm(attn_3d, value_3d)  # [b*K, G*sq, hn]
+        # 恢复形状: [b, num_heads_kv, group_size, sq, hn]
+        context_layer = context_3d.view(b, num_heads_kv, self.group_size, sq, hn)
+        # 合并头维度: [b, num_heads_kv * group_size, sq, hn]
         context_layer = context_layer.view(b, num_heads_kv * self.group_size, sq, hn)
 
         context_layer = context_layer.permute(2, 0, 1, 3).contiguous()

@@ -102,7 +102,7 @@ def get_op_spec(op_name, tp_size, dp_size, algo_index, input_spec):
             return {"R": tp_size, "V": 1, "dims": [1, dp_size, 1]}        
         else:
             return {"R": tp_size, "V": 1, "dims": [dp_size, 1, 1]}
-    elif op_name in ["enc-attention-qkv", "enc-MLP-GEMM-1"]:
+    elif op_name in ["enc-attention-qkv", "enc-attention-gqa-qkv", "enc-MLP-GEMM-1"]:
         if algo_index == 0: # column
             if input_spec:
                 return {"R": tp_size, "V": 1, "dims": [1, dp_size, 1]}
@@ -113,7 +113,7 @@ def get_op_spec(op_name, tp_size, dp_size, algo_index, input_spec):
                 return {"R": 1, "V": 1, "dims": [1, dp_size, tp_size]}
             else:
                 return {"R": tp_size, "V": 1, "dims": [1, dp_size, 1]}
-    elif op_name in ["enc-attention-score"]:
+    elif op_name in ["enc-attention-score", "enc-attention-gqa-score"]:
         if input_spec:
             return {"R": 1, "V": 1, "dims": [1, dp_size, tp_size]}
         else:
