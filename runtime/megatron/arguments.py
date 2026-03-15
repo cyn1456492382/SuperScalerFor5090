@@ -90,12 +90,18 @@ def parse_args(extra_args_provider=None, defaults={},
     with open(args.flexpipe_config, "r") as f:
         config_dict = json.load(f)
 
+    print(f"READING ARGS FROM: {args.flexpipe_config}")
     args.model_name = config_dict["model_name"]
     args.global_batch_size = config_dict["global_batch_size"]
     args.micro_batch_size = config_dict["micro_batch_size"]
     args.num_layers = config_dict["num_layers"]
 
     if args.model_name in ["gpt"]:
+        args.num_attention_heads = config_dict["num_attention_heads"]
+        args.hidden_size = config_dict["hidden_size"]
+        args.max_position_embeddings = config_dict["max_position_embeddings"]
+        args.seq_length = config_dict["seq_length"]
+    elif args.model_name in ["qwen"]:
         args.num_attention_heads = config_dict["num_attention_heads"]
         args.hidden_size = config_dict["hidden_size"]
         args.max_position_embeddings = config_dict["max_position_embeddings"]
@@ -226,7 +232,8 @@ def parse_args(extra_args_provider=None, defaults={},
                 'and lr-warmup-samples'
 
     # Checks.
-    if args.model_name in ["gpt"]:
+    # qwen 姑且加在这里
+    if args.model_name in ["gpt", "qwen"]:
         if args.ffn_hidden_size is None:
             args.ffn_hidden_size = 4 * args.hidden_size
 
@@ -672,8 +679,11 @@ def _add_data_args(parser):
                        default=None,
                        choices=['BertWordPieceLowerCase',
                                 'BertWordPieceCase',
-                                'GPT2BPETokenizer'],
+                                'GPT2BPETokenizer',
+                                'Qwen3Tokenizer'],
                        help='What type of tokenizer to use.')
+    group.add_argument('--tokenizer-path', type=str, default=None,
+                       help='Path to the tokenizer files.')
     group.add_argument('--data-impl', type=str, default='infer',
                        choices=['lazy', 'cached', 'mmap', 'infer'],
                        help='Implementation of indexed datasets.')

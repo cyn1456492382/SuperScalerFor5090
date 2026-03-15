@@ -10,7 +10,7 @@ if not os.path.exists(result_path):
 
 if exp_setting == "small":
     log_path = "logs"
-    model_names = ["gpt", "t5", "resnet"]
+    model_names = ["gpt", "t5", "resnet","qwen"]
 elif exp_setting == "large":
     log_path = "logs-large"
     model_names = ["gpt", "t5", "resnet"]

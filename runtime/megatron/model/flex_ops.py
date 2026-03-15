@@ -308,6 +308,8 @@ class Embedding(RopalaModule):
             self.output_tensors_info = {"hidden_states": {"shape": [args.seq_length, args.micro_batch_size, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 1}}
             if args.model_name == "gpt":
                 self.shared_weights_info = {"word_embeddings": {"root": True, "sharing_with_ops": [13*args.num_layers +2], "shape": [args.padded_vocab_size, args.hidden_size], "tp_split_dim": 0, "dp_split_dim": -1}}
+            elif args.model_name == "qwen":
+                self.shared_weights_info = {"word_embeddings": {"root": True, "sharing_with_ops": [13*args.num_layers +2], "shape": [args.padded_vocab_size, args.hidden_size], "tp_split_dim": 0, "dp_split_dim": -1}}
             elif args.model_name == "t5":
                 self.shared_weights_info = {"word_embeddings": {"root": True, "sharing_with_ops": [args.num_layers*13+2, args.num_layers*(13+21)+4], "shape": [args.padded_vocab_size, args.hidden_size], "tp_split_dim": 0, "dp_split_dim": -1},
                                             "position_embeddings": {"root": True, "sharing_with_ops": [args.num_layers*13+2], "shape": [args.max_position_embeddings, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": -1}}
@@ -433,6 +435,8 @@ class ParallelLayerNormOp(RopalaModule):
         
         if args.model_name == "gpt" and self.name == "final-layernorm":
             self.output_tensors_info = {"hidden_states": {"shape": [args.micro_batch_size, args.seq_length, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 0}}
+        elif args.model_name == "qwen" and self.name == "final-layernorm":
+            self.output_tensors_info = {"hidden_states": {"shape": [args.micro_batch_size, args.seq_length, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 0}}
         elif args.model_name == "t5" and self.name == "enc-final-layernorm":
             self.output_tensors_info = {"encoder_output": {"shape": [args.micro_batch_size, args.seq_length, args.hidden_size], "tp_split_dim": -1, "dp_split_dim": 0}}
 
@@ -445,6 +449,9 @@ class ParallelLayerNormOp(RopalaModule):
         ## tensor resharding information
         self.required_input_specs = {"hidden_states": {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]} }
         if args.model_name == "gpt" and self.name == "final-layernorm":
+            self.output_specs = {"hidden_states": {"R": self.tp_size, "V": 1, "dims": [self.dp_size, 1, 1]}} 
+            self.output_mats_info = {"hidden_states": {"from": "hidden_states", "trans":[0, 1, 3, 2, 4]}}   
+        elif args.model_name == "qwen" and self.name == "final-layernorm":
             self.output_specs = {"hidden_states": {"R": self.tp_size, "V": 1, "dims": [self.dp_size, 1, 1]}} 
             self.output_mats_info = {"hidden_states": {"from": "hidden_states", "trans":[0, 1, 3, 2, 4]}}   
         elif args.model_name == "t5" and self.name == "enc-final-layernorm":

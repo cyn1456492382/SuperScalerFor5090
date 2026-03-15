@@ -28,7 +28,7 @@ def build_tokenizer(args):
               flush=True)
 
     # Select and instantiate the tokenizer.
-    assert args.vocab_file is not None
+    assert args.vocab_file is not None or args.tokenizer_path is not None
     if args.tokenizer_type == 'BertWordPieceLowerCase':
         tokenizer = _BertWordPieceTokenizer(vocab_file=args.vocab_file,
                                             lower_case=True,
@@ -40,6 +40,9 @@ def build_tokenizer(args):
     elif args.tokenizer_type == 'GPT2BPETokenizer':
         assert args.merge_file is not None
         tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
+    elif args.tokenizer_type == 'Qwen3Tokenizer':
+        # assert args.merge_file is not None
+        tokenizer = _Qwen3Tokenizer(args.tokenizer_path)
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(args.tokenizer_type))
@@ -292,3 +295,90 @@ class _GPT2BPETokenizer(AbstractTokenizer):
     @property
     def eod(self):
         return self.eod_id
+
+
+from transformers import AutoTokenizer
+
+class _Qwen3Tokenizer(AbstractTokenizer):
+
+    def __init__(self, tokenizer_path):
+        name = "Qwen3Tokenizer"
+        super().__init__(name)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_path,
+            trust_remote_code=True,
+            use_fast=True,
+        )
+
+        self.eod_id = self.tokenizer.eos_token_id
+
+    @property
+    def vocab_size(self):
+        return len(self.tokenizer)
+
+    @property
+    def vocab(self):
+        return self.tokenizer.get_vocab()
+
+    @property
+    def inv_vocab(self):
+        vocab = self.tokenizer.get_vocab()
+        return {v:k for k,v in vocab.items()}
+
+    def tokenize(self, text):
+        return self.tokenizer.encode(text, add_special_tokens=False)
+
+    def detokenize(self, token_ids):
+        return self.tokenizer.decode(token_ids)
+
+    @property
+    def eod(self):
+        return self.eod_id
+
+# from transformers import AutoTokenizer
+
+# class _HFTokenizer(AbstractTokenizer):
+#     def __init__(self, tokenizer_name_or_path):
+#         name = f'HFTokenizer({tokenizer_name_or_path})'
+#         super().__init__(name)
+
+#         self.tokenizer = AutoTokenizer.from_pretrained(
+#             tokenizer_name_or_path,
+#             trust_remote_code=True,
+#             use_fast=True,
+#         )
+
+#         # 尽量兼容现有 AbstractTokenizer 的 eod 语义
+#         if self.tokenizer.eos_token_id is not None:
+#             self.eod_id = self.tokenizer.eos_token_id
+#         elif self.tokenizer.sep_token_id is not None:
+#             self.eod_id = self.tokenizer.sep_token_id
+#         else:
+#             raise ValueError(
+#                 f"Cannot determine eod/eos token id for tokenizer {tokenizer_name_or_path}"
+#             )
+
+#     @property
+#     def vocab_size(self):
+#         return len(self.tokenizer)
+
+#     @property
+#     def vocab(self):
+#         # fast tokenizer 不一定有原生 encoder dict，这里统一导出
+#         return self.tokenizer.get_vocab()
+
+#     @property
+#     def inv_vocab(self):
+#         vocab = self.tokenizer.get_vocab()
+#         return {v: k for k, v in vocab.items()}
+
+#     def tokenize(self, text):
+#         return self.tokenizer.encode(text, add_special_tokens=False)
+
+#     def detokenize(self, token_ids):
+#         return self.tokenizer.decode(token_ids, skip_special_tokens=False)
+
+#     @property
+#     def eod(self):
+#         return self.eod_id

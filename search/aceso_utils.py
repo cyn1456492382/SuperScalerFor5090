@@ -46,7 +46,9 @@ t5_configs = {
 
 qwen_configs = {
     # model_size: (num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)
-    "0_6B": (28, 2048, 1024, 3072, 16, 64, 151936, "fp16")
+    "0_6B": (2, 2048, 1024, 3072, 16, 64, 151936, "fp16")
+    # "0_6B": (2, 2048, 1024, 3072, 16, 64, 51200, "fp16")
+    
 }
 
 ## NOTE: For GPT and T5 models, we use fp16, which will introduce a "main_param" in Megatron

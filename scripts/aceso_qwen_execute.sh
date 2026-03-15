@@ -11,7 +11,7 @@ if [ "$exp_setting" == "small" ]; then
 
     #### Hardware info ####
     NNODES=1
-    GPUS_PER_NODE=8
+    GPUS_PER_NODE=4
     WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
     #### Distributed info ####
@@ -34,19 +34,38 @@ if [ "$exp_setting" == "small" ]; then
 
     # Use Qwen-specific pretrain entry (pretrain_qwen.py)
     # If local tokenizer exists, pass vocab/merge files; else rely on defaults inside pretrain_qwen
-    TOKENIZER_ARGS=""
-    if [ -f "vocabs/qwen/vocab.json" ] && [ -f "vocabs/qwen/merges.txt" ]; then
-        TOKENIZER_ARGS="--tokenizer-type GPT2BPETokenizer --vocab-file vocabs/qwen/vocab.json --merge-file vocabs/qwen/merges.txt"
-    fi
-
+    # TOKENIZER_ARGS=""
+    # if [ -f "vocabs/qwen/vocab.json" ] && [ -f "vocabs/qwen/merges.txt" ]; then
+    #     TOKENIZER_ARGS="--tokenizer-type GPT2BPETokenizer --vocab-file vocabs/qwen/vocab.json --merge-file vocabs/qwen/merges.txt"
+    # fi
+    # --flexpipe-config $CONFIG_SAVE_PATH${file_name} \
+    # --train-iters 3 \
+    # --eval-iters 0 \
+    # --distributed-backend nccl \
+    # --log-path $LOG_PATH \
+    # $TOKENIZER_ARGS \
     python3 -m torch.distributed.launch $DISTRIBUTED_ARGS \
         pretrain_qwen.py \
         --flexpipe-config $CONFIG_SAVE_PATH${file_name} \
         --train-iters 3 \
         --eval-iters 0 \
+        --lr-decay-iters 320000 \
+        --tokenizer-path model_configs/qwen3-0.6B \
+        --vocab-file vocabs/gpt2-vocab.json \
+        --merge-file vocabs/gpt2-merges.txt \
+        --data-impl mmap \
+        --split 949,50,1 \
         --distributed-backend nccl \
+        --lr 0.00015 \
+        --lr-decay-style cosine \
+        --min-lr 1.0e-5 \
+        --weight-decay 1e-2 \
+        --clip-grad 1.0 \
+        --lr-warmup-fraction .01 \
+        --log-interval 1 \
+        --DDP-impl local \
+        --fp16 \
         --log-path $LOG_PATH \
-        $TOKENIZER_ARGS \
         2>&1 | tee ${LOG_PATH}full_log_${config_name}_rank${NODE_RANK}_${CURRENT_TIME}
 
     echo "[LOG][RUNTIME]($(date '+%Y-%m-%d-%H-%M-%S')) end executing config: $config_name ." >> ${RESULT_PATH}full_log.log

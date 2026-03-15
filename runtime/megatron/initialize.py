@@ -135,7 +135,7 @@ def _compile_dependencies():
     # ==================
 
     # Custom kernel constraints check.
-    if args.model_name in ["gpt"]:
+    if args.model_name in ["gpt", "qwen"]:
         seq_len = args.seq_length
 
         ## Temporarily bypass the check in Aceso
@@ -162,15 +162,15 @@ def _compile_dependencies():
         start_time = time.time()
         print('> compiling and loading fused kernels ...', flush=True)
         fused_kernels.load(args)
-        torch.distributed.barrier()
+        torch.distributed.barrier(device_ids=[torch.cuda.current_device()])
     else:
-        torch.distributed.barrier()
+        torch.distributed.barrier(device_ids=[torch.cuda.current_device()])
         fused_kernels.load(args)
     # Simple barrier to make sure all ranks have passed the
     # compilation phase successfully before moving on to the
     # rest of the program. We think this might ensure that
     # the lock is released.
-    torch.distributed.barrier()
+    torch.distributed.barrier(device_ids=[torch.cuda.current_device()])
     if torch.distributed.get_rank() == 0:
         print('>>> done with compiling and loading fused kernels. '
               'Compilation time: {:.3f} seconds'.format(
@@ -181,7 +181,7 @@ def _compile_dependencies():
 def _initialize_distributed():
     """Initialize torch.distributed and mpu."""
     args = get_args()
-
+    print("CUDA_VISIBLE_DEVICES =", os.getenv("CUDA_VISIBLE_DEVICES"), flush=True)
     device_count = torch.cuda.device_count()
     if torch.distributed.is_initialized():
 
@@ -197,12 +197,14 @@ def _initialize_distributed():
             print('> initializing torch distributed ...', flush=True)
         # Manually set the device ids.
         if device_count > 0:
-            device = args.rank % device_count
+            # device = args.rank % device_count
+            device = int(os.environ["LOCAL_RANK"])
             if args.local_rank is not None:
                 assert args.local_rank == device, \
                     'expected local-rank to be the same as rank % device-count.'
             else:
                 args.local_rank = device
+            print(f"========target device: {device}")
             torch.cuda.set_device(device)
         # if device_count > 0:
         #     import os
@@ -246,9 +248,9 @@ def _init_autoresume():
     """Set autoresume start time."""
     autoresume = get_adlr_autoresume()
     if autoresume:
-        torch.distributed.barrier()
+        torch.distributed.barrier(device_ids=[torch.cuda.current_device()])
         autoresume.init()
-        torch.distributed.barrier()
+        torch.distributed.barrier(device_ids=[torch.cuda.current_device()])
 
 
 def _set_random_seed(seed_):

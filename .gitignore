@@ -5,3 +5,4 @@ build/
 *.so
 logs-large
 *.log
+profiler/profiled-time-miniset

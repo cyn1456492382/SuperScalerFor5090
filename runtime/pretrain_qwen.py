@@ -103,25 +103,26 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 
 if __name__ == "__main__":
-    qwen_defaults = _load_qwen_defaults()
-    # Map to Megatron arg names expected by pretrain
-    args_defaults = {
-        'seq_length': qwen_defaults['seq_length'],
-        'hidden_size': qwen_defaults['hidden_size'],
-        'ffn_hidden_size': qwen_defaults['ffn_hidden_size'],
-        'num_attention_heads': qwen_defaults['num_attention_heads'],
-        'kv_channels': qwen_defaults['kv_channels'],
-        'num_layers': qwen_defaults['num_layers'],
-        'padded_vocab_size': qwen_defaults['padded_vocab_size'],
-        # Tokenizer defaults: prefer local runtime/vocabs/qwen if present
-        'tokenizer_type': 'GPT2BPETokenizer',
-        'vocab_file': 'vocabs/qwen/vocab.json',
-        'merge_file': 'vocabs/qwen/merges.txt',
-        'tokenizer_name_or_path': None,
-    }
+    # qwen_defaults = _load_qwen_defaults()
+    # # Map to Megatron arg names expected by pretrain
+    # args_defaults = {
+    #     'seq_length': qwen_defaults['seq_length'],
+    #     'hidden_size': qwen_defaults['hidden_size'],
+    #     'ffn_hidden_size': qwen_defaults['ffn_hidden_size'],
+    #     'num_attention_heads': qwen_defaults['num_attention_heads'],
+    #     'kv_channels': qwen_defaults['kv_channels'],
+    #     'num_layers': qwen_defaults['num_layers'],
+    #     'padded_vocab_size': qwen_defaults['padded_vocab_size'],
+    #     # Tokenizer defaults: prefer local runtime/vocabs/qwen if present
+    #     'tokenizer_type': 'GPT2BPETokenizer',
+    #     'vocab_file': 'vocabs/qwen/vocab.json',
+    #     'merge_file': 'vocabs/qwen/merges.txt',
+    #     'tokenizer_name_or_path': None,
+    # }
 
     forward_step_func = forward_step
 
     pretrain(train_valid_test_datasets_provider, model_provider, forward_step_func,
-             args_defaults=args_defaults)
-
+             args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})
+    # pretrain(train_valid_test_datasets_provider, model_provider, forward_step_func,
+    #          args_defaults={'tokenizer_type': 'Qwen3Tokenizer'})

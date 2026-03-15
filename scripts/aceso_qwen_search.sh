@@ -12,7 +12,7 @@ if [ "$exp_setting" == "small" ]; then
 
     #### Hardware info ####
     num_nodes=1
-    gpus_per_node=8
+    gpus_per_node=4
     memory_limit=56000
 
     #### Search algo parameters ####
