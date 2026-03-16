@@ -1885,7 +1885,7 @@ class ParallelGQAQKVOp(RopalaModule):
             self.required_input_specs["encoder_output"] = {}
             self.output_specs["encoder_output"] = {}
             self.output_mats_info["encoder_output"] = {}
-        elif self.name == "dec-attention-qkv-2":
+        elif self.name == "dec-attention-gqa-qkv-2":
             if self.algo == "column":
                 self.required_input_specs["encoder_output"] = {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]}
                 self.output_specs["encoder_output"] = {"R": self.tp_size, "V": 1, "dims": [1, self.dp_size, 1]}
@@ -1897,6 +1897,8 @@ class ParallelGQAQKVOp(RopalaModule):
 
         self.weight_size = (args.hidden_size * projection_size / self.tp_size) + \
                            (args.hidden_size * 2 * kv_projection_size / self.tp_size)
+        self.num_attention_heads = args.num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
 
     def forward(self, input_tensors, input_extra_tensors, output_extra_tensors, profiling=False):
         output_tensors = {}
@@ -1906,7 +1908,12 @@ class ParallelGQAQKVOp(RopalaModule):
             hidden_states = new_copy_to_tensor_model_parallel_region(
                 self.op_index, hidden_states, self.required_input_specs["hidden_states"], self.input_mats["hidden_states"]
             )
+        # Q投影, 输出最后一维是：
+        #   column路径：本地分片宽度
+        #   row路径   ：完整宽度
         query_layer, _ = self.query(hidden_states)          # [seq_len, batch, num_heads * head_dim]
+        # KV投影，一次投影出[K, V]拼接结果
+        # 最后一个维度对应 2 * num_kv_heads * head_dim
         mixed_kv_layer, _ = self.key_value(hidden_states)   # [seq_len, batch, 2 * num_kv_heads * head_dim]
 
         if self.resharding and self.algo == "row":
@@ -1917,13 +1924,23 @@ class ParallelGQAQKVOp(RopalaModule):
             mixed_kv_layer = new_reduce_from_tensor_model_parallel_region(
                 self.op_index, mixed_kv_layer, self.output_specs["key_layer"], output_mats
             )
+        
+        # 根据不同的并行配置调整宽度设置,column需要分片,row不需要
+        if self.algo == "column":
+            q_heads = self.num_attention_heads_per_partition
+            kv_heads = self.num_kv_heads_per_partition
+        elif self.algo == "row":
+            q_heads = self.num_attention_heads
+            kv_heads = self.num_key_value_heads
+        else:
+            raise RuntimeError("unknown algo")
 
         new_tensor_shape = query_layer.size()[:-1] + \
-            (self.num_attention_heads_per_partition, self.hidden_size_per_attention_head)
+            (q_heads, self.hidden_size_per_attention_head)
         query_layer = query_layer.view(*new_tensor_shape)
 
         new_tensor_shape = mixed_kv_layer.size()[:-1] + \
-            (self.num_kv_heads_per_partition, 2 * self.hidden_size_per_attention_head)
+            (kv_heads, 2 * self.hidden_size_per_attention_head)
         mixed_kv_layer = mixed_kv_layer.view(*new_tensor_shape)
 
         key_layer, value_layer = mpu.split_tensor_along_last_dim(mixed_kv_layer, 2, contiguous_split_chunks=True)
@@ -1968,12 +1985,29 @@ class ParallelGQAQKVOp(RopalaModule):
         return output_tensors
     
 class ParallelGQAAttentionScoreOp(RopalaModule):
+    """
+    Compute attention scores for Grouped Query Attention (GQA).
+
+    GQA核心思想:
+        num_attention_heads = num_key_value_heads * group_size
+
+    每个 KV head 被 group_size 个 Q heads 共享。
+
+    score计算:
+        score_{k,g} = Q_{k,g} * K_k^T
+
+    其中:
+        k = kv head index
+        g = group index
+    """
     def __init__(self, layer_number, op_index, name=None, prev_name=None):
         super(ParallelGQAAttentionScoreOp, self).__init__(op_index, name, prev_name)
         args = get_args()
 
+        # KV heads数量
         num_key_value_heads = args.num_query_groups
         self.num_key_value_heads = num_key_value_heads
+        # Q heads 数量
         self.num_attention_heads = args.num_attention_heads
         self.group_size = self.num_attention_heads // self.num_key_value_heads
 
@@ -2048,13 +2082,14 @@ class ParallelGQAAttentionScoreOp(RopalaModule):
 
         # query: [b, num_heads_k, group_size, sq, hn]
         query_layer = query_layer.permute(1, 2, 3, 0, 4)
-        # key: [b, num_heads_k, hn, sk]
-        key_layer = key_layer.squeeze(3).permute(1, 2, 3, 0)
+        # key: [b, num_heads_k, group_size,hn, sk]
+        key_layer = key_layer.permute(1, 2, 3, 4, 0)
         
         # 计算注意力分数: [b, num_heads_k, group_size, sq, sk]
         attention_scores = torch.matmul(query_layer, key_layer)
         attention_scores = attention_scores / self.norm_factor
 
+        # 按照q heads reshape 注意力
         attention_scores = attention_scores.view(b, num_heads_k * group_size, sq, sk)
 
         output_tensors["hidden_states"] = attention_scores
