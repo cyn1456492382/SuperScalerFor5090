@@ -15,35 +15,37 @@ from megatron.training import pretrain
 from megatron.utils import average_losses_across_data_parallel_group
 
 
-def _load_qwen_defaults():
-    # default placeholders; prefer reading profiler/qwen_config.json
-    defaults = dict(
-        num_layers=24,
-        seq_length=8192,
-        hidden_size=2048,
-        ffn_hidden_size=2048 * 4,
-        num_attention_heads=32,
-        kv_channels=2048 // 32,
-        padded_vocab_size=51200,
-    )
-    try:
-        cfg_path = os.path.join(os.path.dirname(__file__), "..", "profiler", "qwen_config.json")
-        cfg_path = os.path.abspath(cfg_path)
-        if os.path.exists(cfg_path):
-            with open(cfg_path, "r") as f:
-                data = json.load(f)
-            defaults.update({
-                "num_layers": data.get("num_layers", defaults["num_layers"]),
-                "seq_length": data.get("seq_len", defaults["seq_length"]),
-                "hidden_size": data.get("hidden_size", defaults["hidden_size"]),
-                "ffn_hidden_size": data.get("ffn_hidden_size", defaults["ffn_hidden_size"]),
-                "num_attention_heads": data.get("num_attention_heads", defaults["num_attention_heads"]),
-                "kv_channels": data.get("kv_channels", defaults["kv_channels"]),
-                "padded_vocab_size": data.get("vocab_size", defaults["padded_vocab_size"]),
-            })
-    except Exception:
-        pass
-    return defaults
+# def _load_qwen_defaults():
+#     # default placeholders; prefer reading profiler/qwen_config.json
+#     defaults = dict(
+#         num_layers=24,
+#         seq_length=8192,
+#         hidden_size=2048,
+#         ffn_hidden_size=2048 * 4,
+#         num_attention_heads=32,
+#         kv_channels=2048 // 32,
+#         padded_vocab_size=51200,
+#         num_query_groups=8
+#     )
+#     try:
+#         cfg_path = os.path.join(os.path.dirname(__file__), "..", "profiler", "qwen_config.json")
+#         cfg_path = os.path.abspath(cfg_path)
+#         if os.path.exists(cfg_path):
+#             with open(cfg_path, "r") as f:
+#                 data = json.load(f)
+#             defaults.update({
+#                 "num_layers": data.get("num_layers", defaults["num_layers"]),
+#                 "seq_length": data.get("seq_len", defaults["seq_length"]),
+#                 "hidden_size": data.get("hidden_size", defaults["hidden_size"]),
+#                 "ffn_hidden_size": data.get("ffn_hidden_size", defaults["ffn_hidden_size"]),
+#                 "num_attention_heads": data.get("num_attention_heads", defaults["num_attention_heads"]),
+#                 "kv_channels": data.get("kv_channels", defaults["kv_channels"]),
+#                 "padded_vocab_size": data.get("vocab_size", defaults["padded_vocab_size"]),
+#                 "num_query_groups": data.get("num_query_groups", None)
+#             })
+#     except Exception:
+#         pass
+#     return defaults
 
 
 def model_provider(pre_process=True, post_process=True):
@@ -59,11 +61,11 @@ def model_provider(pre_process=True, post_process=True):
 
 def get_batch(data_iterator):
     args = get_args()
-    vocab_size = getattr(args, "padded_vocab_size", 50257)
-    tokens = torch.rand((args.micro_batch_size//mpu.get_op_dp_size(0), args.seq_length), requires_grad=False, device=torch.cuda.current_device()).long() % vocab_size
+    vocab_size = getattr(args, "vocab_size", 50257)
+    tokens = torch.rand((args.micro_batch_size//mpu.get_op_dp_size(0), args.seq_length), requires_grad=False, device=torch.cuda.current_device()).long() * vocab_size
     loss_mask =  (torch.rand((args.micro_batch_size//mpu.get_op_dp_size(-1), args.seq_length), requires_grad=False, device=torch.cuda.current_device()) < 0.5).float()
     attention_mask = (torch.rand((args.micro_batch_size, 1, args.seq_length, args.seq_length), requires_grad=False, device=torch.cuda.current_device()) < 0.5)
-    position_ids = torch.rand((args.micro_batch_size//mpu.get_op_dp_size(0), args.seq_length), requires_grad=False, device=torch.cuda.current_device()).long() % args.seq_length
+    position_ids = torch.rand((args.micro_batch_size//mpu.get_op_dp_size(0), args.seq_length), requires_grad=False, device=torch.cuda.current_device()).long() * args.seq_length
     return tokens, loss_mask, position_ids, attention_mask
 
 

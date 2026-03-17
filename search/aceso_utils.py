@@ -45,9 +45,8 @@ t5_configs = {
 }
 
 qwen_configs = {
-    # model_size: (num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype)
-    "0_6B": (28, 2048, 1024, 3072, 16, 128, 151936, "bf16", 16)
-    # "0_6B": (2, 2048, 1024, 3072, 16, 64, 51200, "fp16")
+    # model_size: (num_layers, seq_len, hidden_size, ffn_hidden_size, num_attention_heads, kv_channels, vocab_size, params_dtype, num_query_groups)
+    "0_6B": (28, 2048, 1024, 3072, 16, 128, 51200, "bf16", 8)
 }
 
 ## NOTE: For GPT and T5 models, we use fp16, which will introduce a "main_param" in Megatron
@@ -181,9 +180,9 @@ def dump_config_to_json(config, file_name, args):
         config_dict["num_layers"] = num_layers
         config_dict["seq_length"] = seq_len
         config_dict["max_position_embeddings"] = seq_len
-        # config_dict["kv_channels"] = kv_channels
-        # config_dict["ffn_hidden_size"] = ffn_hidden_size
-        # config_dict["num_query_groups"] = num_query_groups
+        config_dict["kv_channels"] = kv_channels
+        config_dict["ffn_hidden_size"] = ffn_hidden_size
+        config_dict["num_query_groups"] = num_query_groups
         config_dict["num_attention_heads"] = num_attention_heads
         config_dict["hidden_size"] = hidden_size            
     else:

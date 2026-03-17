@@ -40,9 +40,9 @@ def build_tokenizer(args):
     elif args.tokenizer_type == 'GPT2BPETokenizer':
         assert args.merge_file is not None
         tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
-    elif args.tokenizer_type == 'Qwen3Tokenizer':
-        # assert args.merge_file is not None
-        tokenizer = _Qwen3Tokenizer(args.tokenizer_path)
+    # elif args.tokenizer_type == 'Qwen3Tokenizer':
+    #     # assert args.merge_file is not None
+    #     tokenizer = _Qwen3Tokenizer(args.tokenizer_path)
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(args.tokenizer_type))

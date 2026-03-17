@@ -5,4 +5,12 @@ build/
 *.so
 logs-large
 *.log
+<<<<<<< HEAD
 profiler/profiled-time-miniset
+=======
+profiler/profiled-time-miniset/
+profiler/*.log
+profiler/profiled-time-miniset-*
+profiler/*.html
+profiler/*.txt
+>>>>>>> 86bdde5 (add GQA support for execute)
