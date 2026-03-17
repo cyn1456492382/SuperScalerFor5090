@@ -51,8 +51,8 @@ if [ "$exp_setting" == "small" ]; then
         --eval-iters 0 \
         --lr-decay-iters 320000 \
         --tokenizer-path model_configs/qwen3-0.6B \
-        --vocab-file vocabs/qwen3-0.6b-vocab.json \
-        --merge-file vocabs/qwen3-0.6b-merges.txt \
+        --vocab-file vocabs/gpt2-vocab.json \
+        --merge-file vocabs/gpt2-merges.txt \
         --data-impl mmap \
         --split 949,50,1 \
         --distributed-backend nccl \
