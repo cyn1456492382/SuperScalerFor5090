@@ -13,9 +13,9 @@ if [ "$exp_setting" == "small" ]; then
     #### Hardware info ####
     num_nodes=1
     gpus_per_node=4
-    memory_limit=nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits \
+    memory_limit=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits \
         | head -n "$gpus_per_node" \
-        | awk 'NR==1{min=$1} $1<min{min=$1} END{print min}'
+        | awk 'NR==1{min=$1} $1<min{min=$1} END{print min}')
 
     #### Search algo parameters ####
     budget=$search_budget
