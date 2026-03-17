@@ -291,7 +291,6 @@ def run_search(num_stages, queue=None):
         debug_info(f"[current best time] = {current_min_time}, num_explored_cases = {get_explored_cases()}", args.print_debug_info)
 
     if best_config is not None:
-        print("LLLLLLLLLLLLLLLLLLLL", f'{args.config_save_path}{args.model_name}_{args.model_size}_{best_config.num_stages}stages_{args.config_suffix}.json')
         dump_config_to_json(best_config, f'{args.config_save_path}{args.model_name}_{args.model_size}_{best_config.num_stages}stages_{args.config_suffix}.json', args)
     
     print_search_details(best_config, args, num_stages, num_targets_list, num_hops_list, search_time_list, config_time_list, get_reserved_memory_list(best_config), get_explored_cases())
