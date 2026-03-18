@@ -40,9 +40,9 @@ def build_tokenizer(args):
     elif args.tokenizer_type == 'GPT2BPETokenizer':
         assert args.merge_file is not None
         tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
-    # elif args.tokenizer_type == 'Qwen3Tokenizer':
-    #     # assert args.merge_file is not None
-    #     tokenizer = _Qwen3Tokenizer(args.tokenizer_path)
+    elif args.tokenizer_type == 'Qwen3Tokenizer':
+        # assert args.merge_file is not None
+        tokenizer = _Qwen3Tokenizer(args.tokenizer_path)
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(args.tokenizer_type))
@@ -312,19 +312,25 @@ class _Qwen3Tokenizer(AbstractTokenizer):
         )
 
         self.eod_id = self.tokenizer.eos_token_id
+        self._vocab = None
+        self._inv_vocab = None
 
     @property
     def vocab_size(self):
-        return len(self.tokenizer)
+        return self.tokenizer.vocab_size
 
     @property
     def vocab(self):
-        return self.tokenizer.get_vocab()
+        if self._vocab is None:
+            self._vocab = self.tokenizer.get_vocab()
+        return self._vocab
 
     @property
     def inv_vocab(self):
-        vocab = self.tokenizer.get_vocab()
-        return {v:k for k,v in vocab.items()}
+        if self._inv_vocab is None:
+            vocab = self.vocab
+            self._inv_vocab = {v: k for k, v in vocab.items()}
+        return self._inv_vocab
 
     def tokenize(self, text):
         return self.tokenizer.encode(text, add_special_tokens=False)

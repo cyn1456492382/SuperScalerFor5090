@@ -11,7 +11,7 @@ if [ "$exp_setting" == "small" ]; then
 
     #### Hardware info ####
     NNODES=1
-    GPUS_PER_NODE=4
+    GPUS_PER_NODE=8
     WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
     #### Distributed info ####
