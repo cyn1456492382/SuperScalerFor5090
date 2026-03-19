@@ -185,6 +185,8 @@ def dump_config_to_json(config, file_name, args):
         config_dict["num_query_groups"] = num_query_groups
         config_dict["num_attention_heads"] = num_attention_heads
         config_dict["hidden_size"] = hidden_size            
+        config_dict["vocab_size"]=vocab_size
+        config_dict["params_dtype"]=params_dtype
     else:
         raise RuntimeError(f"{model_name} not supportted.")
 

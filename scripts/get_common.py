@@ -19,7 +19,7 @@ def get_model_sizes(model_name, exp_setting):
         elif model_name == "resnet":
             model_sizes = ["1B"]
         elif model_name == "qwen":
-            model_sizes = ["0.6B"]
+            model_sizes = ["0_6B"]
     #### large-scale
     elif exp_setting == "large":
         if model_name == "gpt":

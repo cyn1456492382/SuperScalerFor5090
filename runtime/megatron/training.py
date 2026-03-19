@@ -62,6 +62,7 @@ from megatron.schedules import forward_backward_pipelining_with_interleaving
 from megatron.utils import report_memory
 from megatron.mpu.utils import ensure_divisibility
 from torch.profiler import profile, record_function, ProfilerActivity
+from megatron.calc_flops import estimate_flops
 
 import csv
 import os
@@ -899,9 +900,13 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             report_memory('(after {} iterations)'.format(iteration))
             report_memory_flag = False
         _time_to_csv = timers.log(timers_to_log, normalizer=args.log_interval)
-
+        # parse args as seq_lens and thpt by tokens/s
+        thpt_by_token= args.seq_length * batch_size / (elapsed_time)
+        estimated_flops, promised_flops, mfu = \
+            estimate_flops(args, [args.seq_length]* batch_size, thpt_by_token)
         if iteration == (args.train_iters - 1):
-            time_to_csv = [["global_batch_size", "time"] + _time_to_csv[0], [batch_size, f"{elapsed_time_per_iteration * 1000.0:.2f}"] + _time_to_csv[1]]
+            time_to_csv = [["global_batch_size", "time"] + _time_to_csv[0] + ["estimated_flops", "promised_flops", "mfu", "thpt(token)"], \
+                           [batch_size, f"{elapsed_time_per_iteration * 1000.0:.2f}"] + _time_to_csv[1]+[estimated_flops, promised_flops, mfu, thpt_by_token]]
             with open(f"{args.log_path}csv/{args.log_name}_stage{mpu.get_pipeline_model_parallel_rank()}_rank{torch.distributed.get_rank()}.csv", mode="w", newline="") as file:
                 writer = csv.writer(file)
                 for row in time_to_csv:

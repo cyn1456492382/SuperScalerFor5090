@@ -107,10 +107,14 @@ def parse_args(extra_args_provider=None, defaults={},
         args.ffn_hidden_size = config_dict["ffn_hidden_size"]
         args.num_query_groups = config_dict.get("num_query_groups", None)
         args.kv_channels = config_dict["kv_channels"]
-        args.params_dtype = getattr(torch, config_dict.get("params_dtype", "float"))
+        args.params_dtype_str = config_dict["params_dtype"]
         args.max_position_embeddings = config_dict["max_position_embeddings"]
         args.seq_length = config_dict["seq_length"]
         args.num_layers = config_dict["num_layers"]
+        args.vocab_size = config_dict["vocab_size"]
+        args.num_hidden_layers = args.num_layers # add this due to need of calc of flops
+        args.num_key_value_heads = args.num_query_groups # same reason as above
+        args.intermediate_size=args.ffn_hidden_size
     elif args.model_name in ["resnet"]:
         args.in_channels = config_dict["in_channels"]
         args.width_factor = config_dict["width_factor"]

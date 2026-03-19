@@ -64,7 +64,7 @@ if [ "$exp_setting" == "small" ]; then
         --lr-warmup-fraction .01 \
         --log-interval 1 \
         --DDP-impl local \
-        --fp16 \
+        --bf16 \
         --log-path $LOG_PATH \
         2>&1 | tee ${LOG_PATH}full_log_${config_name}_rank${NODE_RANK}_${CURRENT_TIME}
 
