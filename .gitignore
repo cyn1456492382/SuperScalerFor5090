@@ -10,3 +10,5 @@ profiler/*.log
 profiler/profiled-time-miniset-*
 profiler/*.html
 profiler/*.txt
+*.csv
+qwen/*
