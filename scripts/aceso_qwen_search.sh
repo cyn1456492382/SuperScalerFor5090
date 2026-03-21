@@ -7,7 +7,7 @@ search_budget=200
 
 if [ "$exp_setting" == "small" ]; then
     model_name=qwen
-    model_size=0_6B
+    model_size=4B
     global_batch_size=64
 
     #### Hardware info ####

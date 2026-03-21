@@ -7,7 +7,7 @@ cd $ROOT_PATH/runtime
 
 if [ "$exp_setting" == "small" ]; then
     #### Model info ####
-    model_size=0_6B
+    model_size=4B
 
     #### Hardware info ####
     NNODES=1
