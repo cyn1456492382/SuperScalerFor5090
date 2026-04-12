@@ -10,7 +10,7 @@ PROFILING_PATH=${RUNTIME_PATH}profiled-time-miniset/
 mkdir -p ${PROFILING_PATH}
 MAX_NUM_GPUS=8
 MODEL_NAME=qwen
-MODEL_SIZE=4B
+MODEL_SIZE=0_6B
 
 for ((tp_size=1; tp_size<=$MAX_NUM_GPUS; tp_size=tp_size*2))
 do
